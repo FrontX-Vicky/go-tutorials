@@ -48,7 +48,7 @@
 ---
 
 ## Day 3 — Error Handling, Pointers, Slices & Maps
-**Date**: November 19, 2025
+**Date**: November 19-20, 2025
 
 **Concepts Covered**:
 - Error handling patterns (no exceptions)
@@ -61,11 +61,41 @@
 - `day3/main.go`
 
 **Key Takeaways**:
-- (To be filled after completing Day 3)
+- Go uses error values instead of exceptions—always check `if err != nil`
+- Must initialize maps with `make()` before use (nil maps panic on write)
+- Map-based deduplication (O(n)) is more idiomatic than nested loops
+- `strings.Fields()` is the standard way to split text into words
+- `defer` + `recover()` can catch panics and convert them to errors
+
+**Tasks Completed**:
+- Built `UserRegistry` with CRUD operations (AddUser, GetUser, UpdateUser, DeleteUser, ListUsers)
+- Implemented `Divide` and `Sqrt` functions with proper error handling
+- Created `RemoveDuplicates` using map for O(n) performance
+- Implemented `CountWords` using `strings.Fields()` and map
+- Implemented `Safe` wrapper to handle panics gracefully
+
+---
+
+## Day 4 — Concurrency: Goroutines, Channels & Sync
+**Date**: November 20, 2025
+
+**Concepts Covered**:
+- Goroutines (lightweight threads)
+- Channels (unbuffered and buffered)
+- Select statement for multiplexing
+- WaitGroups for synchronization
+- Concurrency patterns (worker pool, pipeline, fan-out/fan-in)
+
+**Files Created**:
+- `day4/README.md`
+- `day4/main.go`
+
+**Key Takeaways**:
+- (To be filled after completing Day 4)
 
 **Tasks to Complete**:
-- Build a `UserRegistry` with CRUD operations and error handling
-- Implement calculator functions with error returns
-- Work with slices: remove duplicates
-- Work with maps: count word frequency
-- (Optional) Implement panic recovery with `Safe` wrapper
+- Launch goroutines and coordinate with channels
+- Understand buffered vs unbuffered channels
+- Implement worker pool pattern
+- Use select with timeout
+- (Optional) Build a pipeline with multiple stages
