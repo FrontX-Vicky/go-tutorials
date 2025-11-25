@@ -14,7 +14,7 @@ func PrintNumbers(n int) {
 }
 
 // TODO: Implement Sum function that sends result to a channel
-func Sum(numbers []int, resultChan chan int) {
+func Sum(numbers []int, resultChan chan<- int) {
 	sum := 0
 	for _, num := range numbers {
 		sum += num
