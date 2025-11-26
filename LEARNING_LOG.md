@@ -91,11 +91,36 @@
 - `day4/main.go`
 
 **Key Takeaways**:
-- (To be filled after completing Day 4)
+- Prefer WaitGroups over sleeps to coordinate goroutines
+- Directional channel types (`chan<-`, `<-chan`) clarify intent
+- Buffered vs unbuffered channels change blocking behavior
+- Use select with `time.After`/timers for timeouts
+- Worker pool with `close` + `range` is an idiomatic pattern
 
-**Tasks to Complete**:
+**Tasks Completed**:
 - Launch goroutines and coordinate with channels
 - Understand buffered vs unbuffered channels
 - Implement worker pool pattern
 - Use select with timeout
 - (Optional) Build a pipeline with multiple stages
+
+---
+
+## Day 5 — Context, HTTP Server, Graceful Shutdown, Middleware
+**Date**: November 25, 2025
+
+**Concepts Covered**:
+- Contexts for cancellation and timeouts
+- HTTP handlers and JSON encoding
+- Middleware (logging, request timeout, rate limiting)
+- Graceful shutdown with `Server.Shutdown`
+
+**Files Created**:
+- `day5/README.md`
+- `day5/main.go`
+
+**Key Takeaways**:
+- Always propagate and honor `context.Context` in handlers and stores
+- Protect shared state with `sync.RWMutex`
+- Compose middlewares to add cross-cutting concerns cleanly
+- Implement graceful shutdown to drain in-flight requests safely
