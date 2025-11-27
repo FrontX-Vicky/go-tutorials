@@ -60,6 +60,13 @@ func (us *UserStore) Create(ctx context.Context, user User) error {
 }
 
 func (us *UserStore) Get(ctx context.Context, id string) (User, error) {
+
+	select {
+	case <-ctx.Done():
+		return User{}, ctx.Err()
+	default:
+	}
+
 	us.mu.RLock()
 	defer us.mu.RUnlock()	
 	user, exists := us.users[id]
@@ -70,6 +77,12 @@ func (us *UserStore) Get(ctx context.Context, id string) (User, error) {
 }
 
 func (us *UserStore) List(ctx context.Context) ([]User, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	us.mu.RLock()
 	defer us.mu.RUnlock()	
 	users := []User{}
@@ -95,6 +108,7 @@ func (us *UserStore) Delete(ctx context.Context, id string) error {
 	}
 
 	delete(us.users, id)
+	fmt.Printf("User Deleted with id %s\n", id)
 	return nil
 }	
 
@@ -107,15 +121,20 @@ type Server struct {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users", s.handleUsers)
+	mux.HandleFunc("/users/", s.handleUserByID)
+	mux.HandleFunc("/healthz", s.handleHealthz)
 
 	var h http.Handler = mux
-	// h = Logging(h)
+
+	h = Logging(h)
+	h = RequestTimeout(1 * time.Second)(h) // what is this syntax? what does it do?
+	h = RateLimiter(20, 10)(h)
 	return h
 }
 
 
 // TODO: Implement handler for POST /users (create user)
-
+// TODO: Implement handler for GET /users (list users)
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -132,6 +151,8 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		// time.Sleep(100 * time.Second)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(u) // what it returns?
 	case http.MethodGet:
@@ -148,14 +169,118 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO: Implement handler for GET /users/{id} (get user)
-// TODO: Implement handler for GET /users (list users)
 // TODO: Implement handler for DELETE /users/{id} (delete user)
+func (s *Server) handleUserByID(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Path[len("/users/"):]
+	// print r in console with all its formatting
+	// fmt.Printf("%+v\n", r.Context())
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet: 
+		users, err := s.store.Get(r.Context(), id)
+		if err != nil {
+			if err == context.DeadlineExceeded {
+				http.Error(w, err.Error(), http.StatusRequestTimeout)
+			} else {
+				http.Error(w, err.Error(), http.StatusNotFound)
+			}
+			return
+		}
+		_ = json.NewEncoder(w).Encode(users)
+	case http.MethodDelete:
+		if err := s.store.Delete(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusRequestTimeout)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 // TODO: Implement handler for GET /healthz (simulate dependency check with context)
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-time.After(100 * time.Millisecond):
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	case <-r.Context().Done():
+		http.Error(w, "health check canceled", http.StatusServiceUnavailable)
+	}
+}
 
 // 3. Middleware
+
+type Middleware func (http.Handler) http.Handler // what is this?
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
 // TODO: Implement Logging middleware
+func Logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
+		start := time.Now()
+		ww := &statusWriter{ResponseWriter: w, status: 200}
+		next.ServeHTTP(ww, r)
+		dur := time.Since(start)
+		log.Printf("%s %s -> %d (%s)", r.Method, r.URL.Path, ww.status, dur) // how does it calculate total time taken by API?
+	})
+}
 // TODO: Implement RequestTimeout middleware
+func RequestTimeout(timeout time.Duration) Middleware {
+	return func (next http.Handler) http.Handler {
+		return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request){
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
+			defer cancel()
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // TODO: Implement RateLimiter middleware
+func RateLimiter(rate int, burst int) Middleware { // Explain how this works?
+	if rate <= 0 {
+		rate = 1
+	}
+	if burst <= 0 {
+		burst = 1
+	}
+	tokens := make(chan struct{}, burst)
+	for i := 0; i < burst; i++ {
+		tokens <- struct{}{} // explain what this does? and why this syntax?
+	}
+	go func() {
+		t := time.NewTicker(time.Second / time.Duration(rate))
+		defer t.Stop()
+		for range t.C {
+			select {
+			case tokens <- struct{}{}:
+			default:
+			}
+		}
+	}()
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
+			select {
+			case <-r.Context().Done():
+				http.Error(w, r.Context().Err().Error(), http.StatusGatewayTimeout)
+				return 
+			case <-tokens:
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
+}
 
 // 4. Graceful Shutdown
 // TODO: Set up signal handling and call Server.Shutdown with context
@@ -205,19 +330,12 @@ func main() {
 	// 	fmt.Println("User list:", userList)
 	// }
 
-	
-
-
-
-
 	// TODO: Set up HTTP server and routes
 
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: (&Server{store: us}).routes(), // Explain this lines by each word what it does ?
 	}
-
-	
 
 	// TODO: Wrap handlers with middleware
 
