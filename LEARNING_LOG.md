@@ -124,3 +124,40 @@
 - Protect shared state with `sync.RWMutex`
 - Compose middlewares to add cross-cutting concerns cleanly
 - Implement graceful shutdown to drain in-flight requests safely
+- Token bucket algorithm for rate limiting
+- `struct{}` for memory-efficient signaling channels
+
+**Tasks Completed**:
+- Built context-aware UserStore with RWMutex protection
+- Implemented RESTful HTTP handlers (POST, GET, DELETE)
+- Created middleware: Logging, RequestTimeout, RateLimiter
+- Implemented graceful shutdown with signal handling
+- Health check endpoint with context timeout
+
+---
+
+## Day 6 — Testing, Benchmarking, and Test Coverage
+**Date**: November 28, 2025
+
+**Concepts Covered**:
+- Go's built-in testing package
+- Table-driven tests (idiomatic Go pattern)
+- Test coverage measurement
+- Benchmarking performance
+- Testing HTTP handlers with httptest
+- Testable code patterns
+
+**Files Created**:
+- `day6/README.md`
+- `day6/main.go`
+- `day6/main_test.go`
+
+**Key Takeaways**:
+- (To be filled after completing Day 6)
+
+**Tasks to Complete**:
+- Write table-driven tests for helper functions
+- Test UserStore CRUD operations with edge cases
+- Test HTTP handlers with various inputs
+- Write benchmarks to measure performance
+- Achieve >80% test coverage
