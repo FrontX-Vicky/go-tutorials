@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Helper functions to test
@@ -74,6 +75,7 @@ func (us *UserStore) Create(ctx context.Context, user User) Response {
 	default:
 	}
 
+	time.Sleep(100 * time.Millisecond)
 	us.mu.Lock()
 	defer us.mu.Unlock()
 

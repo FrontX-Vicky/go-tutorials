@@ -117,7 +117,7 @@ Benchmark performance:
 ### 5. Achieve High Test Coverage
 - Run `go test -cover` and aim for >80% coverage
 - Identify untested code paths
-- Add tests for edge cases
+- Add tests for edge **cases**
 
 ## Extra Challenge
 - Mock external dependencies (e.g., database, HTTP client)
