@@ -117,7 +117,7 @@ Benchmark performance:
 ### 5. Achieve High Test Coverage
 - Run `go test -cover` and aim for >80% coverage
 - Identify untested code paths
-- Add tests for edge **cases**
+- Add tests for edge cases
 
 ## Extra Challenge
 - Mock external dependencies (e.g., database, HTTP client)
@@ -125,3 +125,54 @@ Benchmark performance:
 - Write a custom test helper function
 - Test error conditions and panics using `defer` + `recover`
 - Generate coverage report and view in browser
+
+## Key Takeaways
+
+### ✅ Day 6 Completed Successfully
+
+**Test Results**:
+- **All Tests Passing**: ✅ 100% success rate
+- **Test Coverage**: 94.1% of statements
+- **Test Functions**: 8 test functions with subtests
+- **Benchmarks**: 4 benchmark functions
+
+**Important Concepts Mastered**:
+
+1. **Table-Driven Tests**: The idiomatic Go pattern for testing
+   - Define test cases as a slice of structs
+   - Use `t.Run()` for subtests and clean output
+   - Easy to scale and maintain
+
+2. **Context Handling in Tests**:
+   - Always test context cancellation paths
+   - Use `context.WithCancel()` to immediately cancel
+   - Test timeouts with `context.WithTimeout()`
+   - Remember: context checks happen BEFORE slow operations
+
+3. **Test Coverage**:
+   - Aim for >80% coverage (you achieved 94.1%!)
+   - Test success cases, error cases, and edge cases
+   - Coverage ≠ Quality, but it helps ensure completeness
+
+4. **Benchmarking**:
+   - Use `b.N` loop—framework determines iterations
+   - Run with `go test -bench=.`
+   - Measure performance and detect regressions
+
+5. **Helper Functions**:
+   - `createTestUser()` — reduce duplication
+   - `createTimeoutContext()` — reusable test setup
+   - Keep test code DRY (Don't Repeat Yourself)
+
+**Best Practices Applied**:
+- ✅ All test function names follow `TestXxx` convention
+- ✅ All benchmarks follow `BenchmarkXxx` convention
+- ✅ Subtests organized with `t.Run()`
+- ✅ Clear error messages with `t.Errorf()`
+- ✅ Edge cases covered (empty strings, zero values, not found, duplicates)
+- ✅ Context cancellation tested for concurrent operations
+
+**Next Steps**:
+- Move to Day 7 to learn about package management and modules
+- Or explore advanced testing patterns (mocking, interfaces)
+- Practice writing tests BEFORE implementation (TDD)

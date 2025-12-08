@@ -137,7 +137,7 @@
 ---
 
 ## Day 6 — Testing, Benchmarking, and Test Coverage
-**Date**: November 28, 2025
+**Date**: November 28 - December 8, 2025
 
 **Concepts Covered**:
 - Go's built-in testing package
@@ -151,13 +151,67 @@
 - `day6/README.md`
 - `day6/main.go`
 - `day6/main_test.go`
+- `day6/main_test_answers.go` (answer sheet)
 
 **Key Takeaways**:
-- (To be filled after completing Day 6)
 
-**Tasks to Complete**:
-- Write table-driven tests for helper functions
-- Test UserStore CRUD operations with edge cases
-- Test HTTP handlers with various inputs
-- Write benchmarks to measure performance
-- Achieve >80% test coverage
+1. **Table-Driven Tests**: The idiomatic Go pattern
+   - Define test cases as a slice of structs
+   - Use `t.Run()` for subtests and clean hierarchical output
+   - Easy to scale—add new cases without code duplication
+
+2. **Test Function Purpose**: `func TestXxx(t *testing.T)`
+   - `t *testing.T` parameter gives access to testing methods
+   - `t.Errorf()` - report failure
+   - `t.Run()` - create subtests
+   - `t.Fail()`, `t.Fatal()`, `t.Skip()` - test control
+
+3. **Context Testing**:
+   - Always test context cancellation paths
+   - Use `context.WithCancel()` to cancel immediately
+   - Context checks happen BEFORE slow operations
+   - Test context.WithTimeout() for deadline scenarios
+
+4. **Test Coverage**:
+   - Achieved **94.1% coverage** (exceeded 80% goal)
+   - Test success cases, error cases, and edge cases
+   - Use `go test -cover` to measure
+   - Coverage ≠ Quality, but helps identify untested paths
+
+5. **Benchmarking**:
+   - Use `b.N` loop—Go framework determines iterations
+   - Run with `go test -bench=.`
+   - Measures performance and detects regressions
+   - `b.ReportAllocs()` shows memory allocations
+
+6. **Helper Functions**:
+   - `createTestUser()` - reduce test setup duplication
+   - `createTimeoutContext()` - reusable context creation
+   - Keep test code DRY
+
+**Tasks Completed**:
+- ✅ Wrote table-driven tests for `Add`, `IsPalindrome`, `Reverse`, `ValidateEmail`
+- ✅ Tested UserStore CRUD (Create, Get, List, Delete) with edge cases
+- ✅ Tested context cancellation for concurrent operations
+- ✅ Wrote benchmarks for performance measurement
+- ✅ Achieved 94.1% test coverage
+- ✅ All 8 test functions + subtests passing (100% success)
+- ✅ Created answer sheet with complete solution
+
+**Test Results**:
+- **Status**: ✅ PASS (all tests passing)
+- **Coverage**: 94.1% of statements
+- **Test Functions**: 8 (TestAdd, TestIsPalindrome, TestReverse, TestValidateEmail, TestUserStore_Create, TestUserStore_Get, TestUserStore_List, TestUserStore_Delete)
+- **Subtests**: 16+ (organized with t.Run())
+- **Benchmarks**: 4 (BenchmarkAdd, BenchmarkIsPalindrome, BenchmarkUserStore_Create, BenchmarkUserStore_Get)
+
+**Code Quality**:
+- ✅ All test functions follow `TestXxx` convention
+- ✅ All benchmarks follow `BenchmarkXxx` convention
+- ✅ Subtests organized with `t.Run(name, func(t *testing.T) {})`
+- ✅ Clear error messages with `t.Errorf()`
+- ✅ Edge cases covered: empty strings, zero values, not found errors, duplicates, context cancellation
+- ✅ Idiomatic Go patterns throughout
+
+**Grade**: 95/100
+
