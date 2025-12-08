@@ -66,12 +66,13 @@ func TestReverse(t *testing.T) {
 	// TODO: Test cases: "hello" -> "olleh", "Go" -> "oG", ""
 	tests := []struct {
 		input string
-		want string}{
-			{"hello", "olleh"},
-			{"Go", "oG"},
-			{"", ""},
-		}
-	
+		want  string
+	}{
+		{"hello", "olleh"},
+		{"Go", "oG"},
+		{"", ""},
+	}
+
 	// TODO: Test Unicode strings
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
@@ -137,7 +138,7 @@ func TestUserStore_Create(t *testing.T) {
 			}
 		}
 	})
-	
+
 	// TODO: Test context cancellation
 	t.Run("Context Cancellation", func(t *testing.T) { // Why this is not working as expected?
 		CreatedUserStore := NewUserStore()
@@ -216,19 +217,19 @@ func TestUserStore_Delete(t *testing.T) {
 	UserStore := NewUserStore()
 	ctx_bg := context.Background()
 	UserStore.Create(ctx_bg, User{ID: "1", Name: "Alice", Age: 30})
-	t.Run("Success Case", func(t *testing.T){
+	t.Run("Success Case", func(t *testing.T) {
 		err := UserStore.Delete(ctx_bg, "1")
 		if err != nil {
 			t.Errorf("Delete failed: %v", err)
 		}
 	})
 	// TODO: Test not found error
-	t.Run("Not Found Error", func(t *testing.T){
+	t.Run("Not Found Error", func(t *testing.T) {
 		err := UserStore.Delete(ctx_bg, "10")
 		if err == nil {
 			t.Errorf("User Deleted hence case faild")
 		}
-   	})
+	})
 	// TODO: Test context cancellation
 	t.Run("Context Cancellation", func(t *testing.T) { // Why this is not working as expected?
 		UserStore := NewUserStore()
