@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	// "net/url"
 	"strings"
 	"sync"
 )
@@ -110,39 +111,39 @@ func handleCreateUser(store *SimpleUserStore) http.HandlerFunc {
 		// 6. Write 201 status on success
 		// 7. Marshal and write created user as JSON
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed) // 405
 			return
 		}
 
 		var user User
 		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "failed to read body", http.StatusBadRequest)
+		if err != nil || len(body) == 0 || len(body) > 1024 { // limit to 1MB
+			http.Error(w, "failed to read body", http.StatusBadRequest) // 400
 			return
 		}
 		defer r.Body.Close()
 
 		if err := json.Unmarshal(body, &user); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			http.Error(w, "invalid JSON", http.StatusBadRequest) // 400
 			return
 		}
 
-		if user.ID == "" || user.Name == "" {
-			http.Error(w, "missing required fields", http.StatusBadRequest)
+		if user.ID == "" || user.Name == "" || user.Age <= 0 || user.Age > 120 {
+			http.Error(w, "missing required fields", http.StatusBadRequest) // 400
 			return
 		}
 
 		if err := store.Create(user); err != nil {
 			if strings.Contains(err.Error(), "already exists") {
-				http.Error(w, err.Error(), http.StatusConflict)
+				http.Error(w, err.Error(), http.StatusConflict) // 409
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError) // 500
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusCreated) // 201
 		json.NewEncoder(w).Encode(user)
 	}
 }
@@ -167,7 +168,8 @@ func handleGetUser(store *SimpleUserStore) http.HandlerFunc {
 		}
 
 		id := strings.TrimPrefix(r.URL.Path, "/users/")
-		if id == "" {
+		// escape id for invalid chars like %
+		if id == "" || !isNumeric(id) { // give error for non-numeric IDs
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
@@ -203,7 +205,7 @@ func handleDeleteUser(store *SimpleUserStore) http.HandlerFunc {
 		}
 
 		id := strings.TrimPrefix(r.URL.Path, "/users/")
-		if id == "" {
+		if id == "" || !isNumeric(id) { // give error for non-numeric IDs
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
@@ -250,6 +252,15 @@ func setupRouter(store *SimpleUserStore) *http.ServeMux {
 	})
 
 	return mux
+}
+
+func isNumeric(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func main() {

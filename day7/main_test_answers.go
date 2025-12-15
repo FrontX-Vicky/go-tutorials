@@ -327,6 +327,259 @@ func TestHTTPEndpoints_TableDriven_Answer(t *testing.T) {
 	}
 }
 
+// Middleware Testing Examples
+
+// TestMiddleware_Logging_Answer demonstrates testing a logging middleware
+func TestMiddleware_Logging_Answer(t *testing.T) {
+	// Test that logging middleware executes and logs request details
+	store := NewSimpleUserStore()
+
+	// Create a custom response writer to capture what's written
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	rr := httptest.NewRecorder()
+
+	// Track if middleware was called
+	middlewareCalled := false
+
+	// Create a simple logging middleware
+	loggingMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewareCalled = true
+			// In real scenario, this would log to a logger
+			// log.Printf("Request: %s %s", r.Method, r.URL.Path)
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	// Wrap the handler with middleware
+	handler := loggingMiddleware(handleListUsers(store))
+	handler.ServeHTTP(rr, req)
+
+	// Verify middleware was called
+	if !middlewareCalled {
+		t.Error("logging middleware was not called")
+	}
+
+	// Verify the handler still works correctly
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+}
+
+// TestMiddleware_Logging_CapturesOutput_Answer shows how to test actual log output
+func TestMiddleware_Logging_CapturesOutput_Answer(t *testing.T) {
+	store := NewSimpleUserStore()
+
+	// Captured log entries
+	var loggedMessages []string
+
+	// Middleware that logs to our slice instead of stdout
+	loggingMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Capture log message
+			logMessage := fmt.Sprintf("Method: %s, Path: %s", r.Method, r.URL.Path)
+			loggedMessages = append(loggedMessages, logMessage)
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	rr := httptest.NewRecorder()
+
+	handler := loggingMiddleware(handleListUsers(store))
+	handler.ServeHTTP(rr, req)
+
+	// Verify log was captured
+	if len(loggedMessages) != 1 {
+		t.Errorf("expected 1 log message, got %d", len(loggedMessages))
+	}
+
+	expectedLog := "Method: GET, Path: /users"
+	if loggedMessages[0] != expectedLog {
+		t.Errorf("expected log '%s', got '%s'", expectedLog, loggedMessages[0])
+	}
+}
+
+// TestMiddleware_Logging_ChainedMiddleware_Answer shows testing multiple middleware
+func TestMiddleware_Logging_ChainedMiddleware_Answer(t *testing.T) {
+	store := NewSimpleUserStore()
+
+	var executionOrder []string
+
+	// First middleware
+	loggingMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			executionOrder = append(executionOrder, "logging_before")
+			next.ServeHTTP(w, r)
+			executionOrder = append(executionOrder, "logging_after")
+		})
+	}
+
+	// Second middleware
+	authMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			executionOrder = append(executionOrder, "auth_before")
+			next.ServeHTTP(w, r)
+			executionOrder = append(executionOrder, "auth_after")
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	rr := httptest.NewRecorder()
+
+	// Chain middleware: logging -> auth -> handler
+	handler := loggingMiddleware(authMiddleware(handleListUsers(store)))
+	handler.ServeHTTP(rr, req)
+
+	// Verify execution order (LIFO - Last In First Out for middleware)
+	expectedOrder := []string{
+		"logging_before",
+		"auth_before",
+		"auth_after",
+		"logging_after",
+	}
+
+	if len(executionOrder) != len(expectedOrder) {
+		t.Fatalf("expected %d executions, got %d", len(expectedOrder), len(executionOrder))
+	}
+
+	for i, expected := range expectedOrder {
+		if executionOrder[i] != expected {
+			t.Errorf("execution order[%d]: expected '%s', got '%s'", i, expected, executionOrder[i])
+		}
+	}
+}
+
+// TestMiddleware_Logging_WithStatusCode_Answer shows a simpler middleware logging example
+func TestMiddleware_Logging_WithStatusCode_Answer(t *testing.T) {
+	store := NewSimpleUserStore()
+
+	var loggedMethod, loggedPath string
+	var middlewareCalled bool
+
+	// Middleware that logs request details
+	loggingMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewareCalled = true
+			loggedMethod = r.Method
+			loggedPath = r.URL.Path
+			// In production, you'd log: log.Printf("%s %s", r.Method, r.URL.Path)
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/users/999", nil)
+	rr := httptest.NewRecorder()
+
+	handler := loggingMiddleware(handleGetUser(store))
+	handler.ServeHTTP(rr, req)
+
+	// Verify middleware was called
+	if !middlewareCalled {
+		t.Error("middleware was not called")
+	}
+
+	// Verify middleware logged the correct values
+	if loggedMethod != http.MethodGet {
+		t.Errorf("expected method GET, logged %s", loggedMethod)
+	}
+
+	if loggedPath != "/users/999" {
+		t.Errorf("expected path /users/999, logged %s", loggedPath)
+	}
+
+	// Verify the actual response status
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rr.Code)
+	}
+}
+
+// TestMiddleware_Logging_TableDriven_Answer shows testing middleware with multiple requests
+func TestMiddleware_Logging_TableDriven_Answer(t *testing.T) {
+	tests := []struct {
+		name        string
+		method      string
+		path        string
+		expectedLog string
+	}{
+		{
+			name:        "GET_users",
+			method:      http.MethodGet,
+			path:        "/users",
+			expectedLog: "GET /users",
+		},
+		{
+			name:        "GET_user_by_id",
+			method:      http.MethodGet,
+			path:        "/users/1",
+			expectedLog: "GET /users/1",
+		},
+		{
+			name:        "POST_users",
+			method:      http.MethodPost,
+			path:        "/users",
+			expectedLog: "POST /users",
+		},
+		{
+			name:        "DELETE_user",
+			method:      http.MethodDelete,
+			path:        "/users/1",
+			expectedLog: "DELETE /users/1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewSimpleUserStore()
+			var loggedMessage string
+
+			loggingMiddleware := func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					loggedMessage = fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+					next.ServeHTTP(w, r)
+				})
+			}
+
+			var body string
+			if tt.method == http.MethodPost {
+				body = `{"id":"1","name":"Alice","age":30}`
+			}
+
+			var req *http.Request
+			if body != "" {
+				req = httptest.NewRequest(tt.method, tt.path, strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+			} else {
+				req = httptest.NewRequest(tt.method, tt.path, nil)
+			}
+
+			rr := httptest.NewRecorder()
+
+			// Select appropriate handler based on path
+			var handler http.Handler
+			if tt.path == "/users" {
+				if tt.method == http.MethodGet {
+					handler = loggingMiddleware(handleListUsers(store))
+				} else {
+					handler = loggingMiddleware(handleCreateUser(store))
+				}
+			} else {
+				if tt.method == http.MethodGet {
+					handler = loggingMiddleware(handleGetUser(store))
+				} else {
+					handler = loggingMiddleware(handleDeleteUser(store))
+				}
+			}
+
+			handler.ServeHTTP(rr, req)
+
+			if loggedMessage != tt.expectedLog {
+				t.Errorf("expected log '%s', got '%s'", tt.expectedLog, loggedMessage)
+			}
+		})
+	}
+}
+
 // Benchmarks
 
 func BenchmarkHandleCreateUser_Answer(b *testing.B) {
