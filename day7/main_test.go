@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Day 7 Test Template: HTTP Handler & Integration Testing
@@ -538,11 +540,36 @@ func TestHTTPEndpoints_TableDriven(t *testing.T) {
 // 6. Middleware Integration (if implemented)
 func TestMiddleware_Logging(t *testing.T) {
 	// TODO: If logging middleware exists, test that it executes
-	
+	store := NewSimpleUserStore()
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	rr := httptest.NewRecorder()
+
+	middlewareCalled := false
+
+	loggingMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewareCalled = true
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	handler := loggingMiddleware(handleListUsers(store))
+	handler.ServeHTTP(rr, req)
+
+	if !middlewareCalled {
+		t.Errorf("logging middleware was not called")
+	}
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
 }
 
 func TestMiddleware_Timeout(t *testing.T) {
-	// TODO: If timeout middleware exists, test that it cancels long requests
+	// Test timeout middleware that cancels long-running requests
+
+	
+
 }
 
 func TestMiddleware_RateLimiter(t *testing.T) {

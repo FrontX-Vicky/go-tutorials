@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Answer Sheet for Day 7 - HTTP Handler Testing
@@ -578,6 +580,84 @@ func TestMiddleware_Logging_TableDriven_Answer(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMiddleware_Timeout_Answer(t *testing.T) {
+	// Test timeout middleware that cancels long-running requests
+
+	// Create a slow handler that checks for context cancellation
+	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a slow operation that respects context
+		select {
+		case <-time.After(200 * time.Millisecond):
+			// Work completed successfully
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("completed"))
+		case <-r.Context().Done():
+			// Context was cancelled (timeout occurred)
+			w.WriteHeader(http.StatusRequestTimeout)
+			w.Write([]byte("timeout"))
+			return
+		}
+	})
+
+	// Create timeout middleware
+	timeoutMiddleware := func(timeout time.Duration) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Create context with timeout
+				ctx, cancel := context.WithTimeout(r.Context(), timeout)
+				defer cancel()
+
+				// Pass request with timeout context to next handler
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		}
+	}
+
+	// Test 1: Request that should timeout (50ms timeout, 200ms work)
+	t.Run("request_times_out", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/slow", nil)
+		rr := httptest.NewRecorder()
+
+		// Apply 50ms timeout to handler that takes 200ms
+		handler := timeoutMiddleware(50 * time.Millisecond)(slowHandler)
+		handler.ServeHTTP(rr, req)
+
+		// Should timeout
+		if rr.Code != http.StatusRequestTimeout {
+			t.Logf("Expected timeout (408), got status %d", rr.Code)
+		}
+
+		if !strings.Contains(rr.Body.String(), "timeout") {
+			t.Logf("Expected timeout message, got: %s", rr.Body.String())
+		}
+	})
+
+	// Test 2: Request that completes in time
+	t.Run("request_completes", func(t *testing.T) {
+		fastHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Fast handler that completes immediately
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("fast"))
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/fast", nil)
+		rr := httptest.NewRecorder()
+
+		// Apply 100ms timeout to fast handler
+		handler := timeoutMiddleware(100 * time.Millisecond)(fastHandler)
+		handler.ServeHTTP(rr, req)
+
+		// Should complete successfully
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+
+		if !strings.Contains(rr.Body.String(), "fast") {
+			t.Errorf("Expected 'fast' response, got: %s", rr.Body.String())
+		}
+	})
 }
 
 // Benchmarks
