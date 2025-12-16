@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-mysql-org/go-mysql/canal"
 )
 
 // Day 7 Test Template: HTTP Handler & Integration Testing
@@ -568,7 +570,31 @@ func TestMiddleware_Logging(t *testing.T) {
 func TestMiddleware_Timeout(t *testing.T) {
 	// Test timeout middleware that cancels long-running requests
 
-	
+	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a long-running process
+		select {
+		case <-time.After(200 * time.Microsecond):
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"message":"completed"}`))
+		case <-r.Context().Done():
+			// Context was cancelled (timeout)
+			w.WriteHeader(http.StatusRequestTimeout) // 408
+			w.Write([]byte(`{"error":"request timed out"}`))
+			return
+		}
+	})
+
+	timeoutMiddleware := func(timeout time.Duration) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx, cancel := context.WithTimeout(r.Context(), timeout)
+				defer cancel()
+
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		}
+	}
+
 
 }
 
