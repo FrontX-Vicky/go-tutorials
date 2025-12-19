@@ -215,3 +215,150 @@
 
 **Grade**: 95/100
 
+---
+
+## Day 7 — HTTP Handler Testing
+**Date**: December 8-9, 2025
+
+**Concepts Covered**:
+- HTTP handler testing with `httptest` package
+- `httptest.NewRecorder()` for capturing responses
+- `httptest.NewRequest()` for creating test requests
+- Table-driven HTTP tests
+- Middleware testing (Logging, Timeout, RateLimiter)
+- Error response format testing
+- Body size limiting with `http.MaxBytesReader`
+
+**Files Created**:
+- `day7/README.md`
+- `day7/main.go`
+- `day7/main_test.go`
+- `day7/answers_test.go` (answer sheet)
+- `day7/CODE_REVIEW.md`
+- `day7/DATA_FLOW_EXPLANATION.md`
+
+**Key Takeaways**:
+
+1. **httptest Package**: Test HTTP handlers without a network
+   - `httptest.NewRecorder()` captures the response
+   - `httptest.NewRequest()` creates a request with method, path, body
+   - Direct handler invocation for fast, isolated tests
+
+2. **Table-Driven HTTP Tests**: Comprehensive endpoint testing
+   - Test multiple HTTP methods (GET, POST, DELETE)
+   - Test valid/invalid inputs
+   - Test different status codes and response bodies
+
+3. **Middleware Testing**: Test cross-cutting concerns
+   - Logging middleware: verify log output
+   - Timeout middleware: use `context.WithTimeout()`
+   - Rate limiter: test request limiting behavior
+
+4. **Body Size Limiting**: Protect against large payloads
+   - `http.MaxBytesReader()` limits request body size
+   - Returns 413 Payload Too Large when exceeded
+   - Critical for production security
+
+5. **Error Response Testing**: Consistent error format
+   - JSON error responses with structured format
+   - Test Content-Type headers
+   - Verify error message content
+
+**Tasks Completed**:
+- ✅ Implemented REST API with User CRUD handlers
+- ✅ Tested handleListUsers (empty list, with users)
+- ✅ Tested handleCreateUser (valid, invalid JSON, missing fields, large payload)
+- ✅ Tested handleGetUser (valid ID, not found, invalid ID)
+- ✅ Tested handleDeleteUser (existing, not found, invalid ID)
+- ✅ Table-driven tests for all HTTP endpoints
+- ✅ Middleware testing (Logging, Timeout, RateLimiter)
+- ✅ Error response format testing
+- ✅ Body size limit implementation (5KB max)
+
+**Test Results**:
+- **Status**: ✅ PASS (24/24 tests passing)
+- **Coverage**: Comprehensive HTTP handler coverage
+- **Test Functions**: 8 test functions with multiple subtests
+- **Benchmarks**: 2 (handler performance)
+
+**Grade**: 100/100
+
+---
+
+## Day 8 — Concurrency Testing
+**Date**: December 9, 2025
+
+**Concepts Covered**:
+- Race condition detection with `-race` flag
+- Testing concurrent access to shared data
+- Atomic operations with `sync/atomic` package
+- RWMutex for read-heavy concurrent access
+- Worker pool pattern testing
+- Channel and pipeline testing
+- Semaphore pattern for limiting concurrency
+- Fan-out/Fan-in patterns
+- Context cancellation in concurrent code
+- Goroutine leak detection
+
+**Files Created**:
+- `day8/README.md`
+- `day8/main.go`
+- `day8/main_test.go` (exercises)
+- `day8/answers_test.go` (answer key)
+
+**Key Takeaways**:
+
+1. **Race Detector**: Run with `go test -race`
+   - Detects data races at runtime
+   - Essential for concurrent code testing
+   - Note: Requires CGO on some platforms
+
+2. **Atomic Operations**: Thread-safe primitive operations
+   - `atomic.AddInt64()` for counter increment
+   - `atomic.LoadInt64()` for safe reads
+   - Zero allocation, fastest for simple operations
+
+3. **RWMutex Pattern**: Read-write lock optimization
+   - `RLock()/RUnlock()` for concurrent reads
+   - `Lock()/Unlock()` for exclusive writes
+   - Better performance when reads >> writes
+
+4. **Worker Pool Testing**: Verify concurrent job processing
+   - Test jobs are processed correctly
+   - Verify parallel execution improves performance
+   - Test graceful shutdown
+
+5. **Pipeline Testing**: Multi-stage data processing
+   - Test data flows through stages correctly
+   - Test context cancellation stops pipeline
+   - Verify no goroutine leaks
+
+6. **Semaphore Pattern**: Limit concurrent operations
+   - Buffered channel as counting semaphore
+   - `TryAcquire()` for non-blocking attempt
+   - Test max concurrency is respected
+
+7. **Goroutine Leak Detection**:
+   - Use `runtime.NumGoroutine()` before/after
+   - Ensure resources are cleaned up
+   - Critical for long-running services
+
+**Tasks Completed**:
+- ✅ SafeCounter with atomic operations
+- ✅ ConcurrentCache with RWMutex and TTL
+- ✅ WorkerPool for concurrent job processing
+- ✅ Pipeline with context cancellation
+- ✅ Semaphore for concurrency limiting
+- ✅ Fan-out/Fan-in pattern implementation
+- ✅ 14 exercises with comprehensive testing
+- ✅ 15 answer tests (all passing)
+- ✅ Benchmarks for concurrent operations
+
+**Test Results**:
+- **Status**: ✅ PASS (15/15 answer tests passing)
+- **Exercises**: 14 TODO tests for practice
+- **Patterns Covered**: 6 major concurrency patterns
+- **Benchmarks**: 3 (SafeCounter, Cache Set, Cache Get)
+
+**Grade**: 100/100
+
