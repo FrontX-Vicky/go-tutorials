@@ -660,6 +660,238 @@ func TestMiddleware_Timeout_Answer(t *testing.T) {
 	})
 }
 
+// TestMiddleware_RateLimiter_Answer demonstrates rate limiting middleware
+func TestMiddleware_RateLimiter_Answer(t *testing.T) {
+	store := NewSimpleUserStore()
+
+	// Simple rate limiter that allows N requests per time window
+	rateLimiterMiddleware := func(maxRequests int) func(http.Handler) http.Handler {
+		var requestCount int
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+				if requestCount > maxRequests {
+					http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+
+	// Test: Allow 3 requests, block the 4th
+	t.Run("blocks_after_threshold", func(t *testing.T) {
+		handler := rateLimiterMiddleware(3)(handleListUsers(store))
+
+		// First 3 requests should succeed
+		for i := 1; i <= 3; i++ {
+			req := httptest.NewRequest(http.MethodGet, "/users", nil)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Errorf("Request %d: expected status 200, got %d", i, rr.Code)
+			}
+		}
+
+		// 4th request should be rate limited
+		req := httptest.NewRequest(http.MethodGet, "/users", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusTooManyRequests {
+			t.Errorf("Expected status 429 (Too Many Requests), got %d", rr.Code)
+		}
+
+		if !strings.Contains(rr.Body.String(), "Rate limit exceeded") {
+			t.Errorf("Expected rate limit error message, got: %s", rr.Body.String())
+		}
+	})
+}
+
+// TestErrorResponses_Format_Answer tests error message format consistency
+func TestErrorResponses_Format_Answer(t *testing.T) {
+	store := NewSimpleUserStore()
+
+	tests := []struct {
+		name           string
+		setupRequest   func() (*http.Request, http.Handler)
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name: "400_Bad_Request_Invalid_JSON",
+			setupRequest: func() (*http.Request, http.Handler) {
+				req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"invalid json`))
+				req.Header.Set("Content-Type", "application/json")
+				return req, handleCreateUser(store)
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid",
+		},
+		{
+			name: "404_Not_Found",
+			setupRequest: func() (*http.Request, http.Handler) {
+				req := httptest.NewRequest(http.MethodGet, "/users/999", nil)
+				return req, handleGetUser(store)
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "not found",
+		},
+		{
+			name: "400_Bad_Request_Empty_ID",
+			setupRequest: func() (*http.Request, http.Handler) {
+				req := httptest.NewRequest(http.MethodGet, "/users/", nil)
+				return req, handleGetUser(store)
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid",
+		},
+		{
+			name: "409_Conflict_Duplicate",
+			setupRequest: func() (*http.Request, http.Handler) {
+				// Pre-create a user
+				store.Create(User{ID: "100", Name: "Existing", Age: 30})
+				req := httptest.NewRequest(http.MethodPost, "/users",
+					strings.NewReader(`{"id":"100","name":"Duplicate","age":25}`))
+				req.Header.Set("Content-Type", "application/json")
+				return req, handleCreateUser(store)
+			},
+			expectedStatus: http.StatusConflict,
+			expectedError:  "already exists",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset store for each test
+			store = NewSimpleUserStore()
+
+			req, handler := tt.setupRequest()
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			// Verify status code
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d", tt.expectedStatus, rr.Code)
+			}
+
+			// Verify error message contains expected text (case-insensitive)
+			body := strings.ToLower(rr.Body.String())
+			if tt.expectedStatus >= 400 && !strings.Contains(body, tt.expectedError) {
+				t.Logf("Response body should contain '%s', got: %s", tt.expectedError, rr.Body.String())
+			}
+
+			// Verify Content-Type for errors (should be text/plain or application/json)
+			contentType := rr.Header().Get("Content-Type")
+			if tt.expectedStatus >= 400 && contentType != "" {
+				if !strings.Contains(contentType, "text/plain") &&
+					!strings.Contains(contentType, "application/json") {
+					t.Logf("Error response Content-Type should be text/plain or application/json, got: %s", contentType)
+				}
+			}
+		})
+	}
+}
+
+// TestErrorResponses_Format_Detailed_Answer shows more detailed error format testing
+func TestErrorResponses_Format_Detailed_Answer(t *testing.T) {
+	store := NewSimpleUserStore()
+
+	t.Run("400_errors_are_consistent", func(t *testing.T) {
+		badRequests := []struct {
+			name    string
+			method  string
+			path    string
+			body    string
+			handler http.Handler
+		}{
+			{
+				name:    "invalid_json",
+				method:  http.MethodPost,
+				path:    "/users",
+				body:    `{invalid}`,
+				handler: handleCreateUser(store),
+			},
+			{
+				name:    "empty_id",
+				method:  http.MethodGet,
+				path:    "/users/",
+				body:    "",
+				handler: handleGetUser(store),
+			},
+			{
+				name:    "missing_name",
+				method:  http.MethodPost,
+				path:    "/users",
+				body:    `{"id":"1","age":30}`,
+				handler: handleCreateUser(store),
+			},
+		}
+
+		for _, br := range badRequests {
+			t.Run(br.name, func(t *testing.T) {
+				var req *http.Request
+				if br.body != "" {
+					req = httptest.NewRequest(br.method, br.path, strings.NewReader(br.body))
+					req.Header.Set("Content-Type", "application/json")
+				} else {
+					req = httptest.NewRequest(br.method, br.path, nil)
+				}
+
+				rr := httptest.NewRecorder()
+				br.handler.ServeHTTP(rr, req)
+
+				if rr.Code != http.StatusBadRequest {
+					t.Errorf("expected status 400, got %d", rr.Code)
+				}
+
+				// Error message should not be empty
+				if rr.Body.Len() == 0 {
+					t.Error("error response body should not be empty")
+				}
+			})
+		}
+	})
+
+	t.Run("404_errors_are_consistent", func(t *testing.T) {
+		notFoundRequests := []struct {
+			name    string
+			path    string
+			handler http.Handler
+		}{
+			{
+				name:    "user_not_found",
+				path:    "/users/999",
+				handler: handleGetUser(store),
+			},
+			{
+				name:    "delete_not_found",
+				path:    "/users/888",
+				handler: handleDeleteUser(store),
+			},
+		}
+
+		for _, nf := range notFoundRequests {
+			t.Run(nf.name, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodGet, nf.path, nil)
+				rr := httptest.NewRecorder()
+				nf.handler.ServeHTTP(rr, req)
+
+				if rr.Code != http.StatusNotFound {
+					t.Errorf("expected status 404, got %d", rr.Code)
+				}
+
+				// Error message should indicate "not found"
+				body := strings.ToLower(rr.Body.String())
+				if !strings.Contains(body, "not found") && rr.Body.Len() > 0 {
+					t.Logf("404 response should contain 'not found', got: %s", rr.Body.String())
+				}
+			})
+		}
+	})
+}
+
 // Benchmarks
 
 func BenchmarkHandleCreateUser_Answer(b *testing.B) {

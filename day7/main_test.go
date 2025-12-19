@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/go-mysql-org/go-mysql/canal"
 )
 
 // Day 7 Test Template: HTTP Handler & Integration Testing
@@ -571,9 +570,9 @@ func TestMiddleware_Timeout(t *testing.T) {
 	// Test timeout middleware that cancels long-running requests
 
 	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate a long-running process
+		// Simulate a long-running process (200ms)
 		select {
-		case <-time.After(200 * time.Microsecond):
+		case <-time.After(200 * time.Millisecond):
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"message":"completed"}`))
 		case <-r.Context().Done():
@@ -595,27 +594,220 @@ func TestMiddleware_Timeout(t *testing.T) {
 		}
 	}
 
+	t.Run("TimeoutExceeded", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/slow", nil)
+		rr := httptest.NewRecorder()
+		// Handler takes 200ms, but timeout is 50ms - should timeout
+		handler := timeoutMiddleware(50 * time.Millisecond)(slowHandler)
+		handler.ServeHTTP(rr, req)
 
+		if rr.Code != http.StatusRequestTimeout {
+			t.Errorf("expected status 408, got %d", rr.Code)
+		}
+
+		if !strings.Contains(rr.Body.String(), "request timed out") {
+			t.Errorf("expected timeout error message, got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("CompletedBeforeTimeout", func(t *testing.T) {
+		fastHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Fast operation (10ms)
+			time.Sleep(10 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"message":"completed"}`))
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/fast", nil)
+		rr := httptest.NewRecorder()
+		// Handler takes 10ms, timeout is 100ms - should complete
+		handler := timeoutMiddleware(100 * time.Millisecond)(fastHandler)
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rr.Code)
+		}
+
+		if !strings.Contains(rr.Body.String(), "completed") {
+			t.Errorf("expected success message, got %s", rr.Body.String())
+		}
+	})
 }
 
 func TestMiddleware_RateLimiter(t *testing.T) {
 	// TODO: If rate limiter exists, test that it blocks after threshold
+	store := NewSimpleUserStore()
+
+	rateLimiterMiddleware := func(maxRequests int) func(http.Handler) http.Handler {
+		var requestCount int 
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
+				requestCount++
+				if requestCount > maxRequests {
+					http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+
+	t.Run("blocks after threshold", func(t *testing.T) {
+		handler := rateLimiterMiddleware(3)(handleListUsers(store))
+
+		for i := 1; i <=3; i++ {
+			request := httptest.NewRequest(http.MethodGet, "/users", nil)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, request)
+
+			if rr.Code != http.StatusOK {
+				t.Errorf("expected status 200, got %d on request %d", rr.Code, i)
+			}
+		} 
+
+		req := httptest.NewRequest(http.MethodGet, "/users", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusTooManyRequests {
+			t.Errorf("expected status 429, got %d after exceeding limit", rr.Code)
+		}
+
+		if !strings.Contains(rr.Body.String(),  `{"error":"rate limit exceeded"}`) {
+			t.Errorf("expected error message 'Rate limit exceeded', got %s", rr.Body.String())
+		}
+	})
+
 }
 
 // 7. Error Response Format
 func TestErrorResponses_Format(t *testing.T) {
 	// TODO: Test error message format for 400, 404, 500
+
+	store := NewSimpleUserStore()
+
+	tests := []struct {
+		name           string
+		setupRequest   func() (*http.Request, http.Handler)
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name: "400_Bad_request_invalid_json",
+			setupRequest: func() (*http.Request, http.Handler) {
+				req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"invalid json`))
+				req.Header.Set("Content-Type", "application/json")
+				return req, handleCreateUser(store)
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError: "invalid",
+		},
+			{
+			name: "404_Not_Found",
+			setupRequest: func() (*http.Request, http.Handler) {
+				req := httptest.NewRequest(http.MethodGet, "/users/999", nil)
+				return req, handleGetUser(store)
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "not found",
+		},
+		{
+			name: "400_Bad_Request_Empty_ID",
+			setupRequest: func() (*http.Request, http.Handler) {
+				req := httptest.NewRequest(http.MethodGet, "/users/", nil)
+				return req, handleGetUser(store)
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid",
+		},
+		{
+			name: "409_Conflict_Duplicate",
+			setupRequest: func() (*http.Request, http.Handler) {
+				// Pre-create a user
+				store.Create(User{ID: "100", Name: "Existing", Age: 30})
+				req := httptest.NewRequest(http.MethodPost, "/users",
+					strings.NewReader(`{"id":"100","name":"Duplicate","age":25}`))
+				req.Header.Set("Content-Type", "application/json")
+				return req, handleCreateUser(store)
+			},
+			expectedStatus: http.StatusConflict,
+			expectedError:  "already exists",
+		},
+
+	}
+
+	for _,tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// store := NewSimpleUserStore()
+			req, handler := tt.setupRequest()
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d", tt.expectedStatus, rr.Code)
+			}
+
+			body := strings.ToLower(rr.Body.String())
+			if tt.expectedStatus >= 400 && !strings.Contains(body, tt.expectedError) {
+				t.Logf("Response body should contain '%s', got: %s", tt.expectedError, rr.Body.String())
+			}
+
+			contentType := rr.Header().Get("Content-Type")
+			if tt.expectedStatus >= 400 && contentType != "" {
+				if !strings.Contains(contentType, "application/json") && !strings.Contains(contentType, "text/plain") {
+					t.Logf("expected Content-Type application/json, got %s", contentType)
+				}
+			}
+
+
+		})
+	}
 }
 
 // 8. Benchmark Handlers
 func BenchmarkHandleCreateUser(b *testing.B) {
 	// TODO: Benchmark POST /users handler
+	store := NewSimpleUserStore()
+
+	for i := 0; i < b.N; i++ {
+		body := fmt.Sprintf(`{"id":"%d","name":"User%d","age":25}`, i, i)
+		req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		handler := handleCreateUser(store)
+		handler.ServeHTTP(rr, req)	
+	}
 }
 
 func BenchmarkHandleListUsers(b *testing.B) {
 	// TODO: Benchmark GET /users handler
+	store := NewSimpleUserStore()
+
+	for i := 0; i < 1000; i++ {
+		store.Create(User{ID: fmt.Sprintf("%d", i), Name: fmt.Sprintf("User%d", i), Age: 25})
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/users", nil)
+		rr := httptest.NewRecorder()
+		handler := handleListUsers(store)
+		handler.ServeHTTP(rr, req)
+	}
 }
 
 func BenchmarkHandleGetUser(b *testing.B) {
 	// TODO: Benchmark GET /users/:id handler
+	store := NewSimpleUserStore()
+	store.Create(User{ID: "1", Name: "Alice", Age: 30})
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/users/1", nil)
+		rr := httptest.NewRecorder()
+		handler := handleGetUser(store)
+		handler.ServeHTTP(rr, req)
+	}
 }
