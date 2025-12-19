@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
 	// "net/url"
 	"strings"
 	"sync"
@@ -115,13 +116,22 @@ func handleCreateUser(store *SimpleUserStore) http.HandlerFunc {
 			return
 		}
 
+		// Limit request body size to 5KB (enough for reasonable user data)
+		const maxBodySize = 5 * 1024 // 5KB
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
+
 		var user User
 		body, err := io.ReadAll(r.Body)
-		if err != nil || len(body) == 0 || len(body) > 1024 { // limit to 1MB
-			http.Error(w, "failed to read body", http.StatusBadRequest) // 400
+		if err != nil {
+			http.Error(w, "request body too large or failed to read", http.StatusBadRequest) // 400
 			return
 		}
 		defer r.Body.Close()
+
+		if len(body) == 0 {
+			http.Error(w, "empty request body", http.StatusBadRequest) // 400
+			return
+		}
 
 		if err := json.Unmarshal(body, &user); err != nil {
 			http.Error(w, "invalid JSON", http.StatusBadRequest) // 400
