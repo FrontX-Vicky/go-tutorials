@@ -286,9 +286,9 @@
 ---
 
 ## Day 8 — Concurrency Testing
-**Date**: December 9, 2025
+**Date**: December 19, 2025
 
-**Concepts Covered**:
+**Concepts to Learn**:
 - Race condition detection with `-race` flag
 - Testing concurrent access to shared data
 - Atomic operations with `sync/atomic` package
@@ -301,64 +301,45 @@
 - Goroutine leak detection
 
 **Files Created**:
-- `day8/README.md`
-- `day8/main.go`
-- `day8/main_test.go` (exercises)
-- `day8/answers_test.go` (answer key)
+- `day8/README.md` - Learning guide
+- `day8/main.go` - Concurrency implementations
+- `day8/main_test.go` - Exercise tests (TODO)
+- `day8/answers_test.go` - Answer key (reference)
 
-**Key Takeaways**:
+**Your Tasks**:
+1. Study `main.go` - understand SafeCounter, ConcurrentCache, WorkerPool, Pipeline, Semaphore
+2. Complete the 14 TODO tests in `main_test.go`
+3. Run tests with `go test -v` to verify your solutions
+4. Compare with `answers_test.go` after completing
 
-1. **Race Detector**: Run with `go test -race`
-   - Detects data races at runtime
-   - Essential for concurrent code testing
-   - Note: Requires CGO on some platforms
+**Commands**:
+```bash
+# Run your exercise tests
+go test -v
 
-2. **Atomic Operations**: Thread-safe primitive operations
-   - `atomic.AddInt64()` for counter increment
-   - `atomic.LoadInt64()` for safe reads
-   - Zero allocation, fastest for simple operations
+# Run answer tests to see expected behavior
+go test -v -run "_Answer$"
 
-3. **RWMutex Pattern**: Read-write lock optimization
-   - `RLock()/RUnlock()` for concurrent reads
-   - `Lock()/Unlock()` for exclusive writes
-   - Better performance when reads >> writes
+# Run benchmarks
+go test -bench=.
+```
 
-4. **Worker Pool Testing**: Verify concurrent job processing
-   - Test jobs are processed correctly
-   - Verify parallel execution improves performance
-   - Test graceful shutdown
-
-5. **Pipeline Testing**: Multi-stage data processing
-   - Test data flows through stages correctly
-   - Test context cancellation stops pipeline
-   - Verify no goroutine leaks
-
-6. **Semaphore Pattern**: Limit concurrent operations
-   - Buffered channel as counting semaphore
-   - `TryAcquire()` for non-blocking attempt
-   - Test max concurrency is respected
-
-7. **Goroutine Leak Detection**:
-   - Use `runtime.NumGoroutine()` before/after
-   - Ensure resources are cleaned up
-   - Critical for long-running services
+**Status**: 🔄 IN PROGRESS
 
 **Tasks Completed**:
-- ✅ SafeCounter with atomic operations
-- ✅ ConcurrentCache with RWMutex and TTL
-- ✅ WorkerPool for concurrent job processing
-- ✅ Pipeline with context cancellation
-- ✅ Semaphore for concurrency limiting
-- ✅ Fan-out/Fan-in pattern implementation
-- ✅ 14 exercises with comprehensive testing
-- ✅ 15 answer tests (all passing)
-- ✅ Benchmarks for concurrent operations
+- ⬜ TestSafeCounter_Basic
+- ⬜ TestSafeCounter_Concurrent
+- ⬜ TestConcurrentCache_Basic
+- ⬜ TestConcurrentCache_Concurrent
+- ⬜ TestConcurrentCache_TTL
+- ⬜ TestWorkerPool_Basic
+- ⬜ TestWorkerPool_Concurrent
+- ⬜ TestPipeline_Basic
+- ⬜ TestPipeline_Cancellation
+- ⬜ TestSemaphore_Basic
+- ⬜ TestSemaphore_TryAcquire
+- ⬜ TestFanOutFanIn
+- ⬜ TestNoGoroutineLeak
 
-**Test Results**:
-- **Status**: ✅ PASS (15/15 answer tests passing)
-- **Exercises**: 14 TODO tests for practice
-- **Patterns Covered**: 6 major concurrency patterns
-- **Benchmarks**: 3 (SafeCounter, Cache Set, Cache Get)
-
-**Grade**: 100/100
+**Grade**: _Pending review after completion_
 
