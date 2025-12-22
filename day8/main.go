@@ -47,91 +47,177 @@ func (c *SafeCounter) Add(n int64) {
 // ============================================
 // 2. ConcurrentCache - Thread-safe cache with RWMutex
 // ============================================
+//
+// WHY RWMutex instead of regular Mutex?
+// -------------------------------------
+// - Regular Mutex: Only ONE goroutine
+//  can access at a time (read OR write)
+// - RWMutex: MULTIPLE goroutines can READ simultaneously, but only ONE can WRITE
+//
+// This is perfect for caches because:
+// - Reads are typically much more frequent than writes (90% reads, 10% writes)
+// - Multiple readers don't conflict with each other
+// - RWMutex allows concurrent reads = better performance
+//
+// LOCK TYPES:
+// - Lock()/Unlock()   = EXCLUSIVE lock (for writes) - blocks ALL other access
+// - RLock()/RUnlock() = SHARED lock (for reads) - allows other readers
 
-// CacheItem represents an item in the cache with TTL
+// CacheItem represents an item in the cache with TTL (Time-To-Live)
+//
+// WHY these data types?
+//   - Value: interface{} = Can store ANY type (string, int, struct, etc.)
+//     This makes the cache generic - you can cache users, products, anything!
+//   - ExpiresAt: time.Time = Exact timestamp when this item becomes invalid
+//     Using time.Time (not duration) makes expiration checks simple: time.Now().After(ExpiresAt)
 type CacheItem struct {
-	Value     interface{}
-	ExpiresAt time.Time
+	Value     interface{} // interface{} = Go's "any type" - flexible but requires type assertion when reading
+	ExpiresAt time.Time   // time.Time = precise moment of expiration (not relative duration)
 }
 
 // ConcurrentCache is a thread-safe cache with TTL support
+//
+// WHY these data types?
+//   - data: map[string]CacheItem = Fast O(1) lookup by key
+//     string keys are common (userID, productID, etc.)
+//   - mu: sync.RWMutex = Protects 'data' from concurrent access
+//     Without this, concurrent reads/writes would corrupt the map!
+//   - ttl: time.Duration = How long items stay valid (e.g., 5*time.Minute)
+//     Stored once, applied to all items for consistency
 type ConcurrentCache struct {
-	data map[string]CacheItem
-	mu   sync.RWMutex
-	ttl  time.Duration
+	data map[string]CacheItem // The actual storage - map provides O(1) access
+	mu   sync.RWMutex         // Protects 'data' - RWMutex allows concurrent reads
+	ttl  time.Duration        // Default lifetime for cache items (e.g., 5 minutes)
 }
 
 // NewConcurrentCache creates a new cache with default TTL
+//
+// WHY return *ConcurrentCache (pointer)?
+// - Mutex/RWMutex should NEVER be copied (causes bugs)
+// - Returning pointer ensures everyone uses the SAME mutex
+// - Also more efficient (no copying large struct)
+//
+// WHY make(map[string]CacheItem)?
+// - Maps must be initialized before use (nil map panics on write)
+// - make() allocates and initializes the map
 func NewConcurrentCache(ttl time.Duration) *ConcurrentCache {
 	return &ConcurrentCache{
-		data: make(map[string]CacheItem),
-		ttl:  ttl,
+		data: make(map[string]CacheItem), // Initialize empty map (required!)
+		ttl:  ttl,                        // Store the TTL for all future items
 	}
 }
 
 // Set adds or updates a value in the cache
+//
+// WHY Lock() (not RLock())?
+// - We're WRITING to the map = need EXCLUSIVE access
+// - Lock() blocks ALL other goroutines (readers AND writers)
+// - This prevents data corruption from concurrent writes
+//
+// WHY defer Unlock()?
+// - defer guarantees Unlock() runs even if panic occurs
+// - Prevents deadlock (forgetting to unlock = program hangs)
+// - Best practice: Lock + defer Unlock on same line
 func (c *ConcurrentCache) Set(key string, value interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.Lock()         // Acquire EXCLUSIVE lock - blocks everyone
+	defer c.mu.Unlock() // Release lock when function returns (even on panic)
+
 	c.data[key] = CacheItem{
-		Value:     value,
-		ExpiresAt: time.Now().Add(c.ttl),
+		Value:     value,                 // Store the actual value
+		ExpiresAt: time.Now().Add(c.ttl), // Calculate expiration: now + TTL duration
 	}
 }
 
 // Get retrieves a value from the cache
+//
+// WHY RLock() (not Lock())?
+// - We're only READING = use SHARED lock
+// - RLock() allows OTHER readers to access simultaneously
+// - Much better performance when many goroutines read at once
+//
+// WHY return (interface{}, bool)?
+// - interface{} = the cached value (caller must type-assert)
+// - bool = "ok" pattern - tells if key exists AND is not expired
+// - Idiomatic Go: val, ok := cache.Get("key")
 func (c *ConcurrentCache) Get(key string) (interface{}, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.RLock()         // Acquire SHARED lock - allows other readers
+	defer c.mu.RUnlock() // Release read lock when done
 
-	item, exists := c.data[key]
+	// Try to find the item in the map
+	item, exists := c.data[key] // map access returns (value, ok)
 	if !exists {
-		return nil, false
+		return nil, false // Key not found
 	}
 
-	// Check if expired
+	// Check if expired (even if key exists, it might be stale)
+	// time.Now().After(item.ExpiresAt) = "is current time past expiration?"
 	if time.Now().After(item.ExpiresAt) {
-		return nil, false
+		return nil, false // Item expired - treat as not found
 	}
 
-	return item.Value, true
+	return item.Value, true // Success! Return value and true
 }
 
 // Delete removes a key from the cache
+//
+// WHY Lock() (not RLock())?
+// - delete() MODIFIES the map = need exclusive access
 func (c *ConcurrentCache) Delete(key string) {
-	c.mu.Lock()
+	c.mu.Lock() // Exclusive lock for write operation
 	defer c.mu.Unlock()
-	delete(c.data, key)
+	delete(c.data, key) // Built-in delete() removes key from map
 }
 
 // Size returns the number of items in the cache
+//
+// NOTE: This returns total items INCLUDING expired ones
+// (expired items are only removed on Get() or CleanupExpired())
+//
+// WHY RLock()?
+// - len() only READS the map = shared lock is sufficient
 func (c *ConcurrentCache) Size() int {
-	c.mu.RLock()
+	c.mu.RLock() // Shared lock - just reading
 	defer c.mu.RUnlock()
-	return len(c.data)
+	return len(c.data) // len() returns number of keys in map
 }
 
 // Clear removes all items from the cache
+//
+// WHY make(map[string]CacheItem) instead of delete loop?
+// - Creating new map is O(1) - instant
+// - Deleting each key would be O(n) - slow for large cache
+// - Old map gets garbage collected automatically
 func (c *ConcurrentCache) Clear() {
-	c.mu.Lock()
+	c.mu.Lock() // Exclusive lock - we're replacing the map
 	defer c.mu.Unlock()
-	c.data = make(map[string]CacheItem)
+	c.data = make(map[string]CacheItem) // Replace with fresh empty map
 }
 
 // CleanupExpired removes expired items from the cache
+//
+// WHY return int?
+// - Tells caller how many items were removed (useful for logging/monitoring)
+//
+// WHY store time.Now() in variable?
+// - Calling time.Now() repeatedly in loop would give different times
+// - Using single 'now' ensures consistent expiration check
+//
+// WHY is it safe to delete during iteration?
+// - Go allows deleting current key while iterating over map
+// - This is explicitly supported in the Go spec
 func (c *ConcurrentCache) CleanupExpired() int {
-	c.mu.Lock()
+	c.mu.Lock() // Exclusive lock - modifying map
 	defer c.mu.Unlock()
 
-	count := 0
-	now := time.Now()
-	for key, item := range c.data {
-		if now.After(item.ExpiresAt) {
-			delete(c.data, key)
-			count++
+	count := 0                      // Track how many items we remove
+	now := time.Now()               // Get current time ONCE for consistency
+	for key, item := range c.data { // Iterate all items
+		if now.After(item.ExpiresAt) { // Is this item expired?
+			delete(c.data, key) // Remove expired item from map
+			count++             // Increment removed counter
 		}
 	}
-	return count
+	return count // Return total removed (for logging/monitoring)
 }
 
 // ============================================

@@ -1,10 +1,15 @@
 package main
 
+
 import (
 	"context"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	// "golang.org/x/text/currency"
 )
 
 // Day 8: Concurrency Testing - Exercises
@@ -20,12 +25,32 @@ import (
 func TestSafeCounter_Basic(t *testing.T) {
 	// TODO: Implement this test
 	// 1. Create a new SafeCounter
+	counter := NewSafeCounter()
 	// 2. Test Increment() increases value by 1
+	counter.Increment()
+	if counter.Value() != 1 {
+		t.Errorf("After increment, expected 1, got %d", counter.Value())
+	}
 	// 3. Test Decrement() decreases value by 1
+	counter.Decrement()
+	if counter.Value() != 0 {
+		t.Errorf("After decrement, expected 0, got %d", counter.Value())
+	}
 	// 4. Test Add() adds the correct amount
+	counter.Add(5)
+	if counter.Value() != 5 {
+		t.Errorf("After add(5), expected 5, got %d", counter.Value())
+	}
+
+	counter.Add(-3)
+	if counter.Value() != 2 {
+		t.Errorf("After add(-3), expected 2, got %d", counter.Value())
+	}
 	// 5. Verify Value() returns correct result
 
-	t.Skip("TODO: Implement TestSafeCounter_Basic")
+
+
+	t.Skip("TODO: Implement TestSafeCounter_Basic") // why this line has used here?
 }
 
 // ============================================
@@ -41,7 +66,32 @@ func TestSafeCounter_Concurrent(t *testing.T) {
 	// 3. Use sync.WaitGroup to wait for all goroutines
 	// 4. Verify final count is 100,000
 
-	t.Skip("TODO: Implement TestSafeCounter_Concurrent")
+	counter := NewSafeCounter()
+	var wg sync.WaitGroup
+
+	numGoroutines := 100
+	increamentsPerGoroutine := 1000
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < increamentsPerGoroutine; j++ {
+				counter.Increment()
+				fmt.Printf("%d\n", counter.Value())
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	expected := int64(numGoroutines * increamentsPerGoroutine)
+
+	if counter.Value() != expected {
+		t.Errorf("Expected %d, got %d", expected, counter.Value())
+	}
+
+	// t.Skip("TODO: Implement TestSafeCounter_Concurrent")
 }
 
 // ============================================
@@ -57,7 +107,42 @@ func TestConcurrentCache_Basic(t *testing.T) {
 	// 4. Test Delete() removes keys
 	// 5. Test Size() returns correct count
 
-	t.Skip("TODO: Implement TestConcurrentCache_Basic")
+	cache := NewConcurrentCache(5 * time.Second)
+
+	cache.Set("key1", "value1")
+	val, ok := cache.Get("key1")
+	if !ok {
+		t.Errorf("Expected key1 to exist")
+	}
+
+	if val != "value1" {
+		t.Errorf("Expected value1, got %v", val)
+	}
+
+	_, ok = cache.Get("nonexistent")
+	if ok {
+		t.Errorf("expected non existent key to return false")
+	}
+
+	cache.Set("key2", "value2")
+	if cache.Size() != 2 {
+		t.Errorf("Expected 2, got %d", cache.Size())
+	}
+
+	cache.Delete("key1")
+	_, ok = cache.Get("key1")
+	if ok {
+		t.Errorf("Expected key1 to be deleted")
+	}
+	if cache.Size() != 1 {
+		t.Errorf("Expected size 1 after delete, got %d", cache.Size())
+	}
+
+	cache.Clear()
+	if cache.Size() != 0 {
+		t.Errorf("Expected size 0 after clear, got %d", cache.Size())
+	}
+	//  t.Skip("TODO: Implement TestConcurrentCache_Basic")
 }
 
 // ============================================
@@ -73,7 +158,30 @@ func TestConcurrentCache_Concurrent(t *testing.T) {
 	// 4. Use WaitGroup to coordinate
 	// 5. Verify no race conditions (run with -race flag)
 
-	t.Skip("TODO: Implement TestConcurrentCache_Concurrent")
+	cache := NewConcurrentCache(5 * time.Second)
+	var wg sync.WaitGroup
+
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			key := string(rune('a' + (i % 26)))
+			cache.Set(key, i)
+		}(i)
+	}
+
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			key := string(rune('a' + (i % 26)))
+			_, _ = cache.Get(key)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// t.Skip("TODO: Implement TestConcurrentCache_Concurrent")
 }
 
 // ============================================
@@ -89,7 +197,24 @@ func TestConcurrentCache_TTL(t *testing.T) {
 	// 4. Wait for TTL to expire
 	// 5. Verify Get() returns false after expiration
 
-	t.Skip("TODO: Implement TestConcurrentCache_TTL")
+	ttl := 100 * time.Millisecond
+
+	cache := NewConcurrentCache(ttl)
+	cache.Set("key", "value")
+
+	val, ok := cache.Get("key")
+	if !ok || val != "value" {
+		t.Errorf("value should exist immediately after setting")
+	}
+
+	time.Sleep(ttl + 50*time.Millisecond)
+
+	_, ok = cache.Get("key")
+	if ok {
+		t.Errorf("value should have expired after TTL")
+	}
+
+	// t.Skip("TODO: Implement TestConcurrentCache_TTL")
 }
 
 // ============================================
@@ -106,7 +231,43 @@ func TestWorkerPool_Basic(t *testing.T) {
 	// 5. Collect results and verify correctness
 	// 6. Stop the pool
 
-	t.Skip("TODO: Implement TestWorkerPool_Basic")
+	processor := func(job Job) Result { // why processor funtion declared like this?
+		return Result{
+			JobID: job.ID,
+			Output: job.ID * 2,
+		}
+	}
+
+	pool := NewWorkerPool(2, processor)
+	pool.Start()
+
+	numJobs := 5
+	for i := 0; i < numJobs; i++ {
+		pool.Submit(Job{ID: i, Payload: nil})
+	}
+
+	results := make(map[int]int)
+	timeout := time.After(2 * time.Second)
+
+	for len(results) < numJobs {
+		select {
+		case result := <-pool.Results():
+			results[result.JobID] = result.Output.(int)
+		case <-timeout:
+			t.Fatal("Timeout ")
+		}
+	}
+
+	pool.Stop()
+
+	for i := 0; i < numJobs; i++ {
+		expected := i * 2
+		if results[i] != expected {
+			t.Errorf("Job %d: expected %d, got %d", i, expected, results[i])
+		}
+	}
+
+	// t.Skip("TODO: Implement TestWorkerPool_Basic")
 }
 
 // ============================================
@@ -122,7 +283,45 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 	// 4. Measure time to complete all jobs
 	// 5. Verify parallel processing (should be ~50-100ms, not 200ms)
 
-	t.Skip("TODO: Implement TestWorkerPool_Concurrent")
+	processingTime := 50 * time.Millisecond
+	processor := func(job Job) Result {
+		time.Sleep(processingTime)
+		return Result{JobID: job.ID, Output: "done"}
+	}
+
+	numWorkers := 4
+	pool := NewWorkerPool(numWorkers, processor)
+	pool.Start() // how this will work and why Start is written here?
+
+	numJobs := 4
+	start := time.Now()
+
+	for i := 0; i < numJobs; i++ {
+		pool.Submit(Job{ID: i}) // what submit will do?
+	}
+
+	timeout := time.After(2 * time.Second)
+	collected := 0
+	for collected < numJobs {
+		select {
+		case <-pool.Results():
+			collected++
+		case <-timeout:
+			t.Fatal("Timeout waiting for results")
+		}
+	}
+
+	elapsed := time.Since(start)
+	pool.Stop()
+
+	maxExpected := processingTime * 2
+	if elapsed > maxExpected {
+		t.Errorf("Expected parallel processing in ~%v, took %v", processingTime, elapsed)
+	}
+
+
+
+	// t.Skip("TODO: Implement TestWorkerPool_Concurrent")
 }
 
 // ============================================
@@ -139,7 +338,34 @@ func TestPipeline_Basic(t *testing.T) {
 	// 5. Run pipeline and collect output
 	// 6. Verify output contains correct values
 
-	t.Skip("TODO: Implement TestPipeline_Basic")
+	ctx := context.Background()
+
+	pipeline := NewPipeline()
+	pipeline.AddStage(Multiplier(2))
+
+	input := Generator(ctx, 5)
+
+	output := pipeline.Run(ctx, input)
+
+	var results []int
+	for val := range output {
+		results = append(results, val)
+	}
+
+	expected := []int{0, 2, 4, 6, 8}
+	if len(results) != len(expected) {
+		t.Errorf("Expected %d results, got %d", len(expected), len(results))
+	}
+
+	for i, v := range results {
+		if v != expected[i] {
+			t.Errorf("Index %d: expected %d, got %d", i, expected[i], v)
+		}
+	}
+
+
+
+	// t.Skip("TODO: Implement TestPipeline_Basic")
 }
 
 // ============================================
@@ -155,7 +381,47 @@ func TestPipeline_Cancellation(t *testing.T) {
 	// 4. Cancel context after short time
 	// 5. Verify pipeline stops gracefully
 
-	t.Skip("TODO: Implement TestPipeline_Cancellation")
+	ctx, cancel := context.WithCancel(context.Background())
+
+	pipeline := NewPipeline() // what this function actually does
+	pipeline.AddStage(func(ctx context.Context, in <-chan int) <-chan int {
+		out := make(chan int)
+		go func() {
+			defer close(out)
+			for val := range in {
+				select {
+				case out <- val:
+					time.Sleep(50 * time.Millisecond)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		return out
+	})
+	
+	input := Generator(ctx, 100)
+	output := pipeline.Run(ctx, input)
+
+	collected := 0
+	go func() {
+		for range output {
+			collected++
+		}
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	time.Sleep(100 * time.Millisecond)
+
+	if collected >= 100 {
+		t.Errorf("Expected pipeline to stop early due to cancellation")
+	}
+	t.Logf("Collected %d values before cancellation", collected)
+	
+
+	// t.Skip("TODO: Implement TestPipeline_Cancellation")
 }
 
 // ============================================
@@ -175,7 +441,45 @@ func TestSemaphore_Basic(t *testing.T) {
 	//    - Decrement and release
 	// 4. Verify max concurrent was never exceeded
 
-	t.Skip("TODO: Implement TestSemaphore_Basic")
+	limit := 2
+	sem := NewSemaphore(limit)
+
+	var (
+		active int32
+		maxActive int32
+		wg sync.WaitGroup
+	)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			sem.Acquire()
+			defer sem.Release()
+
+			current := atomic.AddInt32(&active, 1)
+			for {
+				old := atomic.LoadInt32(&maxActive)
+				if current <= old || atomic.CompareAndSwapInt32(&maxActive, old, current) {
+					break
+				}
+			}
+
+			time.Sleep(50 * time.Millisecond)
+
+			atomic.AddInt32(&active, -1)
+		}()
+	}
+
+	wg.Wait()
+
+	if maxActive > int32(limit) {
+		t.Errorf("Max concurrent exceeded limit: got %d, limit was %d", maxActive, limit)
+	}
+	t.Logf("Max concurrent operations: %d (limit: %d)", maxActive, limit)
+
+	// t.Skip("TODO: Implement TestSemaphore_Basic")
 }
 
 // ============================================
