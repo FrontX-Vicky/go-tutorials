@@ -1,14 +1,13 @@
 package main
 
-
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
 	// "golang.org/x/text/currency"
 )
 
@@ -495,7 +494,25 @@ func TestSemaphore_TryAcquire(t *testing.T) {
 	// 4. Release the slot
 	// 5. TryAcquire should return true
 
-	t.Skip("TODO: Implement TestSemaphore_TryAcquire")
+	sem := NewSemaphore(1)
+
+	if !sem.TryAcquire() {
+		t.Error("First TryAcquire should succeed")
+	}
+
+	if sem.TryAcquire() {
+		t.Error("Second TryAcquire should fail")
+	}
+
+	sem.Release()
+
+	if !sem.TryAcquire() {
+		t.Error("TryAcquire after release should succeed")
+	}
+
+	sem.Release()
+
+	// t.Skip("TODO: Implement TestSemaphore_TryAcquire")
 }
 
 // ============================================
@@ -510,7 +527,38 @@ func TestFanOutFanIn(t *testing.T) {
 	// 3. FanIn results back to single channel
 	// 4. Collect and verify results
 
-	t.Skip("TODO: Implement TestFanOutFanIn")
+	ctx := context.Background()
+
+	input := make(chan int, 5)
+	for i := 1; i <= 5; i++ {
+		input <- i
+	}
+	close(input)
+
+	worker := func(n int) int {
+		return n * n
+	}
+	outputs := FanOut(ctx, input, 3, worker)
+
+	results := FanIn(ctx, outputs...)
+
+	var collected []int
+	for val := range results {
+		collected = append(collected, val)
+	}
+
+	expected := map[int]bool{1: true, 4: true, 9: true, 16: true, 25: true}
+	if len(collected) != len(expected) {
+		t.Errorf("Expeted %d results, got %d", len(expected), len(collected))
+	}
+
+	for _, v := range collected {
+		if !expected[v] {
+			t.Errorf("Unexpected result: %d", v)
+		}
+	}
+
+	// t.Skip("TODO: Implement TestFanOutFanIn")
 }
 
 // ============================================
@@ -571,7 +619,43 @@ func TestNoGoroutineLeak(t *testing.T) {
 	// 4. Wait briefly for cleanup
 	// 5. Verify goroutine count returned to initial
 
-	t.Skip("TODO: Implement TestNoGoroutineLeak")
+	initialCount := runtime.NumGoroutine()
+
+	processors := func(job Job) Result {
+		return Result{JobID: job.ID, Output: "done"}
+	}
+	pool := NewWorkerPool(4, processors)
+	pool.Start()
+
+	for i := 0; i < 10; i++ {
+		pool.Submit(Job{ID: i})
+	}
+
+	timeout := time.After(2 * time.Second)
+	collected := 0
+	for collected < 10 {
+		select {
+		case <-pool.Results():
+			collected++
+		case <-timeout:
+			t.Fatal("Timeout waiting for results")
+		}
+	}
+
+	pool.Stop()
+
+	time.Sleep(100 * time.Microsecond)
+
+	runtime.GC()
+
+	finalCount := runtime.NumGoroutine()
+
+	if finalCount > initialCount+2 {
+		t.Errorf("Possible goruotine leak: initial %d, final %d", initialCount, finalCount)
+	}
+	t.Logf("Goroutine count: initial %d, final %d", initialCount, finalCount)
+
+	// t.Skip("TODO: Implement TestNoGoroutineLeak")
 }
 
 // ============================================
@@ -609,6 +693,174 @@ func BenchmarkConcurrentCache_Get(b *testing.B) {
 	})
 }
 
+// ============================================
+// Test: Mutex vs RWMutex Performance
+// ============================================
+
+func TestMutexVsRWMutex_Performance(t *testing.T) {
+
+	type MutexMap struct {
+		data map[string]int
+		mu sync.Mutex
+	}
+
+	type RWMutexMap struct {
+		data map[string]int
+		mu sync.RWMutex
+	}
+	mutexMap := &MutexMap{data: make(map[string]int)}
+	rwMutexMap := &RWMutexMap{data: make(map[string]int)}
+
+	for i := 0; i < 100; i++ {
+		key := string(rune('a' + (i % 26)))
+		mutexMap.data[key] = i
+		rwMutexMap.data[key] = i
+	}
+
+	numOps := 10000
+	var wg sync.WaitGroup
+
+	start := time.Now()
+	for i := 0; i < numOps; i++ {
+		wg.Add(1)
+		if i%10 == 0 {
+			go func(i int) {
+				defer wg.Done()
+				mutexMap.mu.Lock()
+				mutexMap.data["test"] = i
+				mutexMap.mu.Unlock()
+			}(i)
+		} else {
+			go func() {
+				defer wg.Done()
+				mutexMap.mu.Lock()
+				_ = mutexMap.data["test"]
+				mutexMap.mu.Unlock()
+			}()
+		}
+	}
+	wg.Wait()
+	mutexTime := time.Since(start)
+
+	start = time.Now()
+	for i := 0; i < numOps; i++ {
+		wg.Add(1)
+		if i%10 == 0 {
+			go func(i int) {
+				defer wg.Done()
+				rwMutexMap.mu.Lock()
+				rwMutexMap.data["test"] = i
+				rwMutexMap.mu.Unlock()
+			}(i)
+		} else {
+			go func() {
+				defer wg.Done()
+				rwMutexMap.mu.RLock()
+				_ = rwMutexMap.data["test"]
+				rwMutexMap.mu.RUnlock()
+			}()
+		}
+	}
+	wg.Wait()
+	rwMutexTime := time.Since(start)
+
+	t.Logf("Mutex time: %v", mutexTime)
+	t.Logf("RWMutex time: %v", rwMutexTime)
+	t.Logf("RWutex is %.2fx faster for read-heavy workloads", float64(mutexTime)/float64(rwMutexTime))
+}
+
+// ============================================
+// Test: Context Timeout Pattern
+// ============================================
+
+func TestContextTimeout(t *testing.T) {
+	slowOperation := func(ctx context.Context) (string, error) {
+		select {
+		case <-time.After(1 * time.Second):
+			return "completed", nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Microsecond)
+	defer cancel()
+
+	_, err := slowOperation(ctx)
+	if err == nil {
+		t.Error("Expected timeout error")
+	}
+	if err != context.DeadlineExceeded {
+		t.Errorf("Expected context.DeadlineExceeded error, got %v", err)
+	}
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel2()
+
+	result, err := slowOperation(ctx2)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if result != "completed" {
+		t.Errorf("Expected 'completed', got %s", result)
+	}
+}
+
+// ============================================
+// Test: Channel Select Patterns
+// ============================================
+
+func TestChannelSelectPatterns(t *testing.T) {
+	t.Run("Non-blocking send", func(t *testing.T) {
+		ch := make(chan int, 1)
+		ch <- 1
+
+		select {
+		case ch <- 2:
+			t.Error("Should not have sent")
+		default:
+			// Expected - channel is full
+		}
+	}) 
+
+	t.Run("Non-blocikng receive", func(t * testing.T) {
+		ch := make(chan int, 1)
+
+		select {
+		case <-ch:
+			t.Error("Should not have received")
+		default:
+			// Expected - channel is empty
+		}
+	})
+
+	t.Run("Multi-channel select", func(t *testing.T) {
+		ch1 := make(chan int, 1)
+		ch2 := make(chan int, 1)
+
+		ch2 <- 42
+
+		var result int 
+		select {
+		case result = <-ch1:
+		case result = <-ch2:
+		}
+
+		if result != 42 {
+			t.Errorf("Expected 42, got %d", result)
+		}
+	})
+
+	t.Run("Timeout with select", func(t * testing.T) {
+		ch := make(chan int)
+
+		select {
+		case <-ch:
+			t.Error("should have timed out")
+		case <-time.After(50 * time.Microsecond):
+		}
+	})
+}
 // ============================================
 // Helper: Wait for condition with timeout
 // ============================================

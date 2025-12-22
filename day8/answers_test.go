@@ -531,7 +531,7 @@ func TestNoGoroutineLeak_Answer(t *testing.T) {
 // Test: Mutex vs RWMutex Performance
 // ============================================
 
-func TestMutexVsRWMutex_Performance(t *testing.T) {
+func TestMutexVsRWMutex_Performance_Answer(t *testing.T) {
 	// This test demonstrates when RWMutex is beneficial
 	// (when reads greatly outnumber writes)
 
