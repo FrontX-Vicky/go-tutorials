@@ -49,7 +49,7 @@ func TestSafeCounter_Basic(t *testing.T) {
 
 
 
-	t.Skip("TODO: Implement TestSafeCounter_Basic") // why this line has used here?
+	// t.Skip("TODO: Implement TestSafeCounter_Basic") // why this line has used here?
 }
 
 // ============================================
