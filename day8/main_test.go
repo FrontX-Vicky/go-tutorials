@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	// "fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -47,8 +47,6 @@ func TestSafeCounter_Basic(t *testing.T) {
 	}
 	// 5. Verify Value() returns correct result
 
-
-
 	// t.Skip("TODO: Implement TestSafeCounter_Basic") // why this line has used here?
 }
 
@@ -69,22 +67,22 @@ func TestSafeCounter_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 
 	numGoroutines := 100
-	increamentsPerGoroutine := 1000
+	incrementsPerGoroutine := 1000 // Correct spelling
 
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < increamentsPerGoroutine; j++ {
+			for j := 0; j < incrementsPerGoroutine; j++ {
 				counter.Increment()
-				fmt.Printf("%d\n", counter.Value())
+				// fmt.Printf("%d\n", counter.Value())
 			}
 		}()
 	}
 
 	wg.Wait()
 
-	expected := int64(numGoroutines * increamentsPerGoroutine)
+	expected := int64(numGoroutines * incrementsPerGoroutine)
 
 	if counter.Value() != expected {
 		t.Errorf("Expected %d, got %d", expected, counter.Value())
@@ -232,7 +230,7 @@ func TestWorkerPool_Basic(t *testing.T) {
 
 	processor := func(job Job) Result { // why processor funtion declared like this?
 		return Result{
-			JobID: job.ID,
+			JobID:  job.ID,
 			Output: job.ID * 2,
 		}
 	}
@@ -318,8 +316,6 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 		t.Errorf("Expected parallel processing in ~%v, took %v", processingTime, elapsed)
 	}
 
-
-
 	// t.Skip("TODO: Implement TestWorkerPool_Concurrent")
 }
 
@@ -362,8 +358,6 @@ func TestPipeline_Basic(t *testing.T) {
 		}
 	}
 
-
-
 	// t.Skip("TODO: Implement TestPipeline_Basic")
 }
 
@@ -398,7 +392,7 @@ func TestPipeline_Cancellation(t *testing.T) {
 		}()
 		return out
 	})
-	
+
 	input := Generator(ctx, 100)
 	output := pipeline.Run(ctx, input)
 
@@ -418,7 +412,6 @@ func TestPipeline_Cancellation(t *testing.T) {
 		t.Errorf("Expected pipeline to stop early due to cancellation")
 	}
 	t.Logf("Collected %d values before cancellation", collected)
-	
 
 	// t.Skip("TODO: Implement TestPipeline_Cancellation")
 }
@@ -444,9 +437,9 @@ func TestSemaphore_Basic(t *testing.T) {
 	sem := NewSemaphore(limit)
 
 	var (
-		active int32
+		active    int32
 		maxActive int32
-		wg sync.WaitGroup
+		wg        sync.WaitGroup
 	)
 
 	for i := 0; i < 10; i++ {
@@ -582,11 +575,13 @@ func (c *UnsafeCounter) Value() int {
 
 func TestUnsafeCounter_Race(t *testing.T) {
 	// This test demonstrates race detection
-	// When run with -race, Go will detect the data race
+	// Note: -race flag requires CGO (C compiler), which may not be available on Windows
+	// This test will still show incorrect results due to race condition, even without -race
 
-	t.Skip("Skipped: Run manually with 'go test -race -run TestUnsafeCounter_Race' to see race detection")
+	// Skip by default to avoid confusion - uncomment below to see race condition effects
+	t.Skip("Skipped: Uncomment code below to see race condition (final count will be < 100000)")
 
-	// Uncomment below to see race detection in action:
+	// Uncomment below to see race condition in action:
 	/*
 		counter := &UnsafeCounter{}
 		var wg sync.WaitGroup
@@ -701,12 +696,12 @@ func TestMutexVsRWMutex_Performance(t *testing.T) {
 
 	type MutexMap struct {
 		data map[string]int
-		mu sync.Mutex
+		mu   sync.Mutex
 	}
 
 	type RWMutexMap struct {
 		data map[string]int
-		mu sync.RWMutex
+		mu   sync.RWMutex
 	}
 	mutexMap := &MutexMap{data: make(map[string]int)}
 	rwMutexMap := &RWMutexMap{data: make(map[string]int)}
@@ -783,7 +778,7 @@ func TestContextTimeout(t *testing.T) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Microsecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	_, err := slowOperation(ctx)
@@ -821,9 +816,9 @@ func TestChannelSelectPatterns(t *testing.T) {
 		default:
 			// Expected - channel is full
 		}
-	}) 
+	})
 
-	t.Run("Non-blocikng receive", func(t * testing.T) {
+	t.Run("Non-blocikng receive", func(t *testing.T) {
 		ch := make(chan int, 1)
 
 		select {
@@ -840,7 +835,7 @@ func TestChannelSelectPatterns(t *testing.T) {
 
 		ch2 <- 42
 
-		var result int 
+		var result int
 		select {
 		case result = <-ch1:
 		case result = <-ch2:
@@ -851,16 +846,17 @@ func TestChannelSelectPatterns(t *testing.T) {
 		}
 	})
 
-	t.Run("Timeout with select", func(t * testing.T) {
+	t.Run("Timeout with select", func(t *testing.T) {
 		ch := make(chan int)
 
 		select {
 		case <-ch:
 			t.Error("should have timed out")
-		case <-time.After(50 * time.Microsecond):
+		case <-time.After(50 * time.Millisecond):
 		}
 	})
 }
+
 // ============================================
 // Helper: Wait for condition with timeout
 // ============================================

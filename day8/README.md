@@ -17,6 +17,20 @@ go test -race ./...
 - Essential for concurrent code
 - Slight performance overhead (10-20x slower)
 
+**⚠️ Important Note for Windows Users**:
+- The `-race` flag requires CGO (C compiler) to be installed
+- If you don't have `gcc` installed, you'll get: `cgo: C compiler "gcc" not found`
+- **Solution**: Run tests without `-race` flag - they work perfectly fine!
+- Race conditions still produce incorrect results even without the detector
+- The race detector just makes them easier to find
+
+**To install CGO on Windows** (optional):
+1. Install TDM-GCC: https://jmeubank.github.io/tdm-gcc/
+2. Or install MinGW: http://www.mingw.org/
+3. Add to PATH and restart terminal
+
+**Alternative**: Use WSL (Windows Subsystem for Linux) for race detection
+
 ### 3. Testing with Goroutines
 - Waiting for goroutines to complete
 - Using channels for synchronization
