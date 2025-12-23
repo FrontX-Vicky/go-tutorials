@@ -637,7 +637,7 @@ func TestNoGoroutineLeak(t *testing.T) {
 
 	pool.Stop()
 
-	time.Sleep(100 * time.Microsecond)
+	time.Sleep(100 * time.Millisecond)
 
 	runtime.GC()
 
@@ -759,7 +759,7 @@ func TestMutexVsRWMutex_Performance(t *testing.T) {
 
 	t.Logf("Mutex time: %v", mutexTime)
 	t.Logf("RWMutex time: %v", rwMutexTime)
-	t.Logf("RWutex is %.2fx faster for read-heavy workloads", float64(mutexTime)/float64(rwMutexTime))
+	t.Logf("RWMutex is %.2fx faster for read-heavy workloads", float64(mutexTime)/float64(rwMutexTime))
 }
 
 // ============================================
@@ -816,7 +816,7 @@ func TestChannelSelectPatterns(t *testing.T) {
 		}
 	})
 
-	t.Run("Non-blocikng receive", func(t *testing.T) {
+	t.Run("Non-blocking receive", func(t *testing.T) {
 		ch := make(chan int, 1)
 
 		select {
