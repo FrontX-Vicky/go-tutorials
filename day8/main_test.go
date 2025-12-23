@@ -579,10 +579,9 @@ func TestUnsafeCounter_Race(t *testing.T) {
 	// This test will still show incorrect results due to race condition, even without -race
 
 	// Skip by default to avoid confusion - uncomment below to see race condition effects
-	t.Skip("Skipped: Uncomment code below to see race condition (final count will be < 100000)")
+	// t.Skip("Skipped: Uncomment code below to see race condition (final count will be < 100000)")
 
 	// Uncomment below to see race condition in action:
-	/*
 		counter := &UnsafeCounter{}
 		var wg sync.WaitGroup
 
@@ -598,7 +597,6 @@ func TestUnsafeCounter_Race(t *testing.T) {
 
 		wg.Wait()
 		t.Logf("Final value: %d (expected 100000, but may differ due to race)", counter.Value())
-	*/
 }
 
 // ============================================
