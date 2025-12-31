@@ -361,3 +361,35 @@ go test -bench=.
 
 **Grade**: 98/100 (Excellent work! Minor deduction for initial deadlock, but great learning!)
 
+---
+
+## Day 9 - Generics and Reusable Data Structures
+**Date**: December 30, 2025
+
+**Concepts Covered**:
+- Type parameters and type inference
+- Constraints: `any`, `comparable`, custom `Ordered`
+- Generic data structures (Stack, Queue, Set)
+- Generic slice utilities (Map, Filter, Reduce)
+- Min/Max helpers and zero values in generics
+
+**Files Created**:
+- `day9/README.md`
+- `day9/main.go`
+- `day9/main_test.go`
+- `day9/answers_test.go`
+- `day9/go.mod`
+
+**Key Takeaways**:
+- Constraints define which operations are legal on type parameters
+- `comparable` enables sets and equality-based helpers
+- Use `var zero T` for empty generic returns
+- Preallocate slices in generic helpers to reduce allocations
+
+**Tasks**:
+- Write tests for Stack, Queue, and Set
+- Write tests for Map/Filter/Reduce and Contains/Unique
+- Write tests for Min/Max and empty inputs
+
+**Status**: 🟡 IN PROGRESS
+
